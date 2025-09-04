@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UPI QR Code Generator</title>
+    <!-- Use a CDN for the QR code library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <style>
+      :root {
+        --primary-color: #2c3e50;
+        --secondary-color: #3498db;
+        --background-color: #f4f7f6;
+        --card-bg-color: #ffffff;
+        --text-color: #333333;
+        --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      body {
+        font-family: 'Arial', sans-serif;
+        background-color: var(--background-color);
+        /* Use flexbox to center content and ensure it fills the viewport */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        color: var(--text-color);
+        box-sizing: border-box;
+      }
+      .container {
+        /* Adjusted width for a more "stretch-fit" feel on mobile */
+        width: 95%;
+        /* Use a max-width to prevent the container from getting too wide on large screens */
+        max-width: 400px;
+        padding: 24px;
+        background-color: var(--card-bg-color);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        text-align: center;
+        transition: transform 0.3s ease-in-out;
+      }
+      h1 {
+        color: var(--primary-color);
+        /* Increased font size for better mobile readability */
+        font-size: 2rem; 
+        margin-bottom: 24px;
+      }
+      .form-group {
+        margin-bottom: 20px;
+        text-align: left;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+        color: var(--primary-color);
+      }
+      input[type="number"], input[type="text"] {
+        /* Full width for inputs on mobile, making them easy to tap */
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        box-sizing: border-box;
+        font-size: 1rem;
+        transition: border-color 0.3s ease;
+      }
+      input[type="number"]:focus, input[type="text"]:focus {
+        outline: none;
+        border-color: var(--secondary-color);
+      }
+      button {
+        /* Full width for buttons on mobile, ensuring a good tap target */
+        width: 100%;
+        padding: 12px;
+        background-color: var(--secondary-color);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background-color 0.3s ease, transform 0.1s ease;
+        margin-top: 10px;
+      }
+      button:hover {
+        background-color: #2980b9;
+      }
+      button:active {
+        transform: scale(0.98);
+      }
+      #qr-code-display {
+        display: none;
+      }
+      #qrcode {
+        margin: 24px auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      #qr-message {
+        font-size: 1rem;
+        margin-top: 16px;
+        color: var(--text-color);
+      }
+      #upi-id-display {
+        font-size: 0.9rem;
+        color: var(--secondary-color);
+        font-weight: bold;
+        margin-top: 8px;
+      }
+      #error-message {
+        color: #e74c3c;
+        margin-top: -10px;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+      }
+      .gemini-button {
+          background-color: #f39c12;
+      }
+      .gemini-button:hover {
+          background-color: #e67e22;
+      }
+      #loading-spinner {
+        display: none;
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border-left-color: var(--secondary-color);
+        animation: spin 1s ease infinite;
+        margin: 0 auto;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @media (min-width: 600px) {
+        .container {
+          padding: 32px;
+        }
+        h1 {
+          /* Further increased font size for desktop */
+          font-size: 2.5rem; 
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Input Form -->
+      <div id="input-form">
+        <h1>Sachin Warlyani</h1>
+        <div class="form-group">
+          <label for="amount">Enter Amount:</label>
+          <input type="number" id="amount" placeholder="e.g., 500" min="1" step="0.01">
+        </div>
+        <div id="form-buttons">
+          <button onclick="generateQrCode()">Generate QR</button>
+          <button class="gemini-button" id="suggest-button">✨ Suggest Description</button>
+        </div>
+        <div id="loading-spinner"></div>
+        <div class="form-group">
+          <label for="description">Payment Description:</label>
+          <input type="text" id="description" placeholder="Optional: Add a note">
+        </div>
+        <div id="error-message"></div>
+      </div>
+
+      <!-- QR Code Display -->
+      <div id="qr-code-display">
+        <h1>Sachin Warlyani</h1>
+        <div id="qrcode"></div>
+        <div id="qr-message"></div>
+        <div id="upi-id-display"></div>
+        <!-- Go back button moved to the bottom -->
+        <button onclick="showInputForm()">Go Back</button>
+      </div>
+    </div>
+
+    <script>
+      // The hardcoded UPI ID
+      const upiId = '7709019384@upi'; // <== REMINDER: Change this to your actual UPI ID.
+
+      const formSection = document.getElementById('input-form');
+      const qrSection = document.getElementById('qr-code-display');
+      const qrcodeContainer = document.getElementById('qrcode');
+      const qrMessage = document.getElementById('qr-message');
+      const errorMessage = document.getElementById('error-message');
+      const upiIdDisplay = document.getElementById('upi-id-display');
+      const amountInput = document.getElementById('amount');
+      const descriptionInput = document.getElementById('description');
+      const suggestButton = document.getElementById('suggest-button');
+      const loadingSpinner = document.getElementById('loading-spinner');
+      let qrCodeInstance = null;
+      
+      suggestButton.addEventListener('click', suggestDescription);
+      
+      /**
+       * Generates and displays the QR code, and reads the amount aloud.
+       */
+      async function generateQrCode() {
+        console.log('Attempting to generate QR code...');
+        const amount = amountInput.value;
+        errorMessage.textContent = ''; // Clear any previous error messages
+
+        if (!amount || isNaN(amount) || amount <= 0) {
+          errorMessage.textContent = 'Please enter a valid amount.';
+          console.log('Validation failed: Invalid amount.');
+          return;
+        }
+        
+        // Show spinner to indicate processing
+        loadingSpinner.style.display = 'block';
+
+        try {
+          // Construct the UPI link with the optional description
+          const note = descriptionInput.value ? '&tn=' + encodeURIComponent(descriptionInput.value) : '';
+          const upiLink = 'upi://pay?pa=' + upiId + '&pn=Sachin%20Warlyani&am=' + amount + '&cu=INR' + note;
+          console.log('UPI Link:', upiLink);
+
+          // If an instance exists, remove it to prevent duplicates
+          if (qrCodeInstance) {
+              qrcodeContainer.innerHTML = '';
+          }
+          
+          // Generate the new QR code
+          qrCodeInstance = new QRCode(qrcodeContainer, {
+              text: upiLink,
+              width: 256,
+              height: 256,
+              colorDark: "#000000",
+              colorLight: "#ffffff",
+              correctLevel: QRCode.CorrectLevel.H
+          });
+          
+          qrMessage.textContent = 'Scan to pay ₹' + amount + ' to Sachin Warlyani';
+          upiIdDisplay.textContent = 'UPI ID: ' + upiId;
+          
+          // Hide the input form and show the QR code display
+          formSection.style.display = 'none';
+          qrSection.style.display = 'block';
+          console.log('QR code generated successfully and display switched.');
+
+          // Automatically read the amount aloud for confirmation
+          await readAmount();
+
+        } catch (error) {
+          errorMessage.textContent = 'An error occurred while generating the QR code. Please try again.';
+          console.error('Error during QR code generation:', error);
+        } finally {
+            // Hide spinner after all tasks are complete
+            loadingSpinner.style.display = 'none';
+        }
+      }
+      
+      /**
+       * Shows the input form and hides the QR code display.
+       */
+      function showInputForm() {
+        console.log('Switching to input form view.');
+        formSection.style.display = 'block';
+        qrSection.style.display = 'none';
+      }
+      
+      /**
+       * Calls the Gemini API to suggest a transaction description.
+       */
+      async function suggestDescription() {
+        const amount = amountInput.value;
+        
+        if (!amount || isNaN(amount) || amount <= 0) {
+          errorMessage.textContent = 'Please enter a valid amount to get a suggestion.';
+          return;
+        }
+        
+        errorMessage.textContent = '';
+        suggestButton.disabled = true;
+        suggestButton.textContent = '';
+        loadingSpinner.style.display = 'block';
+
+        const prompt = 'Suggest a brief, one-sentence description for a UPI payment of ' + amount + ' Indian Rupees.';
+        
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            systemInstruction: {
+                parts: [{ text: "Act as a helpful payment assistant. Provide a concise, single-sentence description." }]
+            },
+            tools: [{ "google_search": {} }],
+        };
+        
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+        
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (text) {
+                descriptionInput.value = text.trim().replace(/^['"\s]+|['"\s]+$/g, '');
+            } else {
+                descriptionInput.value = 'Payment for services.';
+            }
+        } catch (error) {
+            console.error('Error calling Gemini API:', error);
+            descriptionInput.value = 'Payment for services.';
+            errorMessage.textContent = 'Failed to get a suggestion. Please try again later.';
+        } finally {
+            loadingSpinner.style.display = 'none';
+            suggestButton.textContent = '✨ Suggest Description';
+            suggestButton.disabled = false;
+        }
+      }
+      
+      /**
+       * Calls the Gemini API to read the amount aloud.
+       */
+      async function readAmount() {
+        const amount = amountInput.value;
+        
+        if (!amount || isNaN(amount) || amount <= 0) {
+          console.error('Invalid amount for text-to-speech.');
+          return;
+        }
+        
+        const prompt = 'Please pay ' + amount + ' rupees to Sachin Warlyani.';
+        const payload = {
+            contents: [{
+                parts: [{ text: prompt }]
+            }],
+            generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: "Kore" }
+                    }
+                }
+            },
+            model: "gemini-2.5-flash-preview-tts"
+        };
+        
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+        
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const result = await response.json();
+            const part = result?.candidates?.[0]?.content?.parts?.[0];
+            const audioData = part?.inlineData?.data;
+            const mimeType = part?.inlineData?.mimeType;
+
+            if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                const sampleRate = parseInt(mimeType.match(/rate=(\d+)/)[1], 10);
+                const pcmData = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmData);
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                const audioUrl = URL.createObjectURL(wavBlob);
+                const audio = new Audio(audioUrl);
+                audio.play();
+                console.log('Audio playback initiated.');
+            } else {
+                console.error('Unexpected audio response format.');
+            }
+
+        } catch (error) {
+            console.error('Error calling TTS API:', error);
+        }
+      }
+      
+      /**
+       * Helper function to decode a base64 string into an ArrayBuffer.
+       * @param {string} base64 The base64-encoded string.
+       * @returns {ArrayBuffer} The decoded data.
+       */
+      function base64ToArrayBuffer(base64) {
+          const binaryString = window.atob(base64);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+          }
+          return bytes.buffer;
+      }
+      
+      /**
+       * Helper function to convert raw PCM data to a WAV Blob.
+       * @param {Int16Array} pcm16 The 16-bit PCM audio data.
+       * @param {number} sampleRate The sample rate of the audio.
+       * @returns {Blob} The WAV audio Blob.
+       */
+      function pcmToWav(pcm16, sampleRate) {
+          const numChannels = 1;
+          const bitsPerSample = 16;
+          const bytesPerSample = bitsPerSample / 8;
+          const blockAlign = numChannels * bytesPerSample;
+          const byteRate = sampleRate * blockAlign;
+          const dataSize = pcm16.byteLength;
+          
+          const buffer = new ArrayBuffer(44 + dataSize);
+          const view = new DataView(buffer);
+          
+          // Write WAV file header
+          let offset = 0;
+          function writeString(str) {
+              for (let i = 0; i < str.length; i++) {
+                  view.setUint8(offset + i, str.charCodeAt(i));
+              }
+              offset += str.length;
+          }
+          function writeUint32(val) {
+              view.setUint32(offset, val, true);
+              offset += 4;
+          }
+          function writeUint16(val) {
+              view.setUint16(offset, val, true);
+              offset += 2;
+          }
+          
+          // RIFF chunk
+          writeString('RIFF');
+          writeUint32(36 + dataSize); // Chunk size
+          writeString('WAVE');
+          
+          // fmt chunk
+          writeString('fmt ');
+          writeUint32(16); // Subchunk1 size
+          writeUint16(1); // Audio format (1 = PCM)
+          writeUint16(numChannels);
+          writeUint32(sampleRate);
+          writeUint32(byteRate);
+          writeUint16(blockAlign);
+          writeUint16(bitsPerSample);
+          
+          // data chunk
+          writeString('data');
+          writeUint32(dataSize);
+          
+          // Write PCM data
+          const pcmBytes = new Uint8Array(pcm16.buffer);
+          for (let i = 0; i < dataSize; i++) {
+              view.setUint8(offset + i, pcmBytes[i]);
+          }
+          
+          return new Blob([view], { type: 'audio/wav' });
+      }
+    </script>
+  </body>
+</html>
